@@ -26,7 +26,7 @@
         <relativePath/><!-- parent is remote -->
     </parent>
 
-    <artifactId>onos-app-oneping</artifactId>
+    <artifactId>oneping</artifactId>
     <version>2.0.0</version>
     <packaging>bundle</packaging>
 
