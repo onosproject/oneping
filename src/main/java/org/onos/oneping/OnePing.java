@@ -19,10 +19,12 @@ import com.google.common.collect.HashMultimap;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.IPv4;
 import org.onlab.packet.MacAddress;
-import org.onlab.util.SharedExecutors;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
+import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.device.DeviceEvent;
+import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
@@ -30,12 +32,10 @@ import org.onosproject.net.flow.FlowRule;
 import org.onosproject.net.flow.FlowRuleEvent;
 import org.onosproject.net.flow.FlowRuleListener;
 import org.onosproject.net.flow.FlowRuleService;
-import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.EthCriterion;
 import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.packet.PacketContext;
-import org.onosproject.net.packet.PacketPriority;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.pi.model.PiActionId;
@@ -51,7 +51,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -91,14 +90,17 @@ public class OnePing {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected PacketService packetService;
 
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected DeviceService deviceService;
+
     private ApplicationId appId;
     private final PacketProcessor packetProcessor = new PingPacketProcessor();
     private final FlowRuleListener flowListener = new InternalFlowListener();
 
     // Selector for ICMP traffic that is to be intercepted
-    private final TrafficSelector intercept = DefaultTrafficSelector.builder()
-            .matchEthType(Ethernet.TYPE_IPV4).matchIPProtocol(IPv4.PROTOCOL_ICMP)
-            .build();
+//    private final TrafficSelector intercept = DefaultTrafficSelector.builder()
+//            .matchEthType(Ethernet.TYPE_IPV4).matchIPProtocol(IPv4.PROTOCOL_ICMP)
+//            .build();
 
     // Means to track detected pings from each device on a temporary basis
     private final HashMultimap<DeviceId, PingRecord> pings = HashMultimap.create();
@@ -110,8 +112,9 @@ public class OnePing {
                                                 () -> log.info("Periscope down."));
         packetService.addProcessor(packetProcessor, PRIORITY);
         flowRuleService.addListener(flowListener);
-        packetService.requestPackets(intercept, PacketPriority.CONTROL, appId,
-                                     Optional.empty());
+        requestPings();
+//        packetService.requestPackets(intercept, PacketPriority.CONTROL, appId,
+//                                     Optional.empty());
         log.info("Started");
     }
 
@@ -144,13 +147,46 @@ public class OnePing {
         }
     }
 
+    // Installs an intercept rule for the ICMP pings on all existing and newly discovered devices.
+    private void requestPings() {
+        deviceService.getAvailableDevices(Device.Type.SWITCH).forEach(d -> requestPings(d.id()));
+        deviceService.addListener(e -> {
+            Device device = e.subject();
+            if (device != null && e.type() == DeviceEvent.Type.DEVICE_ADDED && device.type() == Device.Type.SWITCH) {
+                requestPings(device.id());
+            }
+        });
+    }
+
+    // Installs an intercept rule for the ICMP pings.
+    private void requestPings(DeviceId deviceId) {
+        PiCriterion match = PiCriterion.builder()
+                .matchTernary(PiMatchFieldId.of("hdr.ethernet.ether_type"), Ethernet.TYPE_IPV4, 0xffff)
+                .matchTernary(PiMatchFieldId.of("hdr.ipv4.protocol"), IPv4.PROTOCOL_ICMP, 0xff)
+                .build();
+
+        PiAction action = PiAction.builder()
+                .withId(PiActionId.of("ingress.table0_control.drop"))
+                .build();
+
+        FlowRule dropRule = DefaultFlowRule.builder()
+                .forDevice(deviceId).fromApp(appId).makePermanent().withPriority(PRIORITY)
+                .forTable(PiTableId.of("ingress.table0_control.table0"))
+                .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
+                .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
+                .build();
+
+        // Apply the drop rule...
+        flowRuleService.applyFlowRules(dropRule);
+    }
+
     // Installs a drop rule for the ICMP pings between given src/dst.
     private void banPings(DeviceId deviceId, MacAddress src, MacAddress dst) {
         PiCriterion match = PiCriterion.builder()
-                .matchExact(PiMatchFieldId.of("hdr.ethernet.ether_type"), Ethernet.TYPE_IPV4)
-                .matchExact(PiMatchFieldId.of("hdr.ipv4.protocol"), IPv4.PROTOCOL_ICMP)
-                .matchExact(PiMatchFieldId.of("hdr.ethernet.src_addr"), src.toBytes())
-                .matchExact(PiMatchFieldId.of("hdr.ethernet.dst_addr"), dst.toBytes())
+                .matchTernary(PiMatchFieldId.of("hdr.ethernet.ether_type"), Ethernet.TYPE_IPV4, 0xffff)
+                .matchTernary(PiMatchFieldId.of("hdr.ipv4.protocol"), IPv4.PROTOCOL_ICMP, 0xff)
+                .matchTernary(PiMatchFieldId.of("hdr.ethernet.src_addr"), src.toLong(), 0xffffffffffffL)
+                .matchTernary(PiMatchFieldId.of("hdr.ethernet.dst_addr"), dst.toLong(), 0xffffffffffffL)
                 .build();
 
         PiAction action = PiAction.builder()
@@ -168,7 +204,7 @@ public class OnePing {
         flowRuleService.applyFlowRules(dropRule);
 
         // Schedule the removal of the drop rule after a minute...
-        SharedExecutors.getTimer().schedule(new TimerTask() {
+        timer.schedule(new TimerTask() {
             @Override
             public void run() {
                 flowRuleService.removeFlowRules(dropRule);
