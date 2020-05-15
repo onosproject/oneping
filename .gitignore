@@ -1,6 +1,7 @@
 # Compiled class file
 target/*
 *.class
+tools/*
 
 # Log file
 *.log

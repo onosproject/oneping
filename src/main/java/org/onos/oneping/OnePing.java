@@ -19,9 +19,11 @@ import com.google.common.collect.HashMultimap;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.IPv4;
 import org.onlab.packet.MacAddress;
+import org.onlab.util.SharedExecutors;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowRule;
@@ -29,16 +31,17 @@ import org.onosproject.net.flow.FlowRuleEvent;
 import org.onosproject.net.flow.FlowRuleListener;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flow.TrafficSelector;
-import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.EthCriterion;
-import org.onosproject.net.flowobjective.DefaultForwardingObjective;
-import org.onosproject.net.flowobjective.FlowObjectiveService;
-import org.onosproject.net.flowobjective.ForwardingObjective;
+import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.PacketPriority;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketService;
+import org.onosproject.net.pi.model.PiActionId;
+import org.onosproject.net.pi.model.PiMatchFieldId;
+import org.onosproject.net.pi.model.PiTableId;
+import org.onosproject.net.pi.runtime.PiAction;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
@@ -77,11 +80,10 @@ public class OnePing {
     private static final int DROP_PRIORITY = 129;
     private static final int TIMEOUT_SEC = 60; // seconds
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected CoreService coreService;
+    private static final int SECONDS = 1000;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected FlowObjectiveService flowObjectiveService;
+    protected CoreService coreService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected FlowRuleService flowRuleService;
@@ -142,23 +144,37 @@ public class OnePing {
         }
     }
 
-    // Installs a temporary drop rule for the ICMP pings between given srd/dst.
+    // Installs a drop rule for the ICMP pings between given src/dst.
     private void banPings(DeviceId deviceId, MacAddress src, MacAddress dst) {
-        TrafficSelector selector = DefaultTrafficSelector.builder()
-                .matchEthSrc(src).matchEthDst(dst).build();
-        TrafficTreatment drop = DefaultTrafficTreatment.builder()
-                .drop().build();
+        PiCriterion match = PiCriterion.builder()
+                .matchExact(PiMatchFieldId.of("hdr.ethernet.ether_type"), Ethernet.TYPE_IPV4)
+                .matchExact(PiMatchFieldId.of("hdr.ipv4.protocol"), IPv4.PROTOCOL_ICMP)
+                .matchExact(PiMatchFieldId.of("hdr.ethernet.src_addr"), src.toBytes())
+                .matchExact(PiMatchFieldId.of("hdr.ethernet.dst_addr"), dst.toBytes())
+                .build();
 
-        flowObjectiveService.forward(deviceId, DefaultForwardingObjective.builder()
-                .fromApp(appId)
-                .withSelector(selector)
-                .withTreatment(drop)
-                .withFlag(ForwardingObjective.Flag.VERSATILE)
-                .withPriority(DROP_PRIORITY)
-                .makeTemporary(TIMEOUT_SEC)
-                .add());
+        PiAction action = PiAction.builder()
+                .withId(PiActionId.of("ingress.table0_control.drop"))
+                .build();
+
+        FlowRule dropRule = DefaultFlowRule.builder()
+                .forDevice(deviceId).fromApp(appId).makePermanent().withPriority(DROP_PRIORITY)
+                .forTable(PiTableId.of("ingress.table0_control.table0"))
+                .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
+                .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
+                .build();
+
+        // Apply the drop rule...
+        flowRuleService.applyFlowRules(dropRule);
+
+        // Schedule the removal of the drop rule after a minute...
+        SharedExecutors.getTimer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                flowRuleService.removeFlowRules(dropRule);
+            }
+        }, 60 * SECONDS);
     }
-
 
     // Indicates whether the specified packet corresponds to ICMP ping.
     private boolean isIcmpPing(Ethernet eth) {

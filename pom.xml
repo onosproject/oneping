@@ -39,8 +39,12 @@
         <onos.app.title>One-Ping-Only App</onos.app.title>
         <onos.app.category>Monitoring</onos.app.category>
         <onos.app.url>http://onosproject.org</onos.app.url>
-        <onos.app.requires>org.onosproject.fwd</onos.app.requires>
-        <onos.app.readme>Sample application to permit only one ICMP ping between src and dest.</onos.app.readme>
+        <onos.app.requires>
+            org.onosproject.drivers.bmv2,
+            org.onosproject.pipelines.basic,
+            org.onosproject.fwd
+        </onos.app.requires>
+        <onos.app.readme>Sample application to permit only one ICMP ping between src and dst.</onos.app.readme>
     </properties>
 
     <dependencies>
