@@ -21,21 +21,15 @@ import org.onlab.packet.IPv4;
 import org.onlab.packet.MacAddress;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
-import org.onosproject.net.device.DeviceEvent;
-import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleEvent;
-import org.onosproject.net.flow.FlowRuleListener;
 import org.onosproject.net.flow.FlowRuleService;
-import org.onosproject.net.flow.criteria.Criterion;
-import org.onosproject.net.flow.criteria.EthCriterion;
 import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.packet.PacketContext;
+import org.onosproject.net.packet.PacketPriority;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.net.pi.model.PiActionId;
@@ -51,11 +45,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
-
-import static org.onosproject.net.flow.FlowRuleEvent.Type.RULE_REMOVED;
-import static org.onosproject.net.flow.criteria.Criterion.Type.ETH_SRC;
 
 /**
  * Sample application that permits only one ICMP ping per minute for a unique
@@ -90,17 +82,14 @@ public class OnePing {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected PacketService packetService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected DeviceService deviceService;
-
     private ApplicationId appId;
     private final PacketProcessor packetProcessor = new PingPacketProcessor();
-    private final FlowRuleListener flowListener = new InternalFlowListener();
 
     // Selector for ICMP traffic that is to be intercepted
-//    private final TrafficSelector intercept = DefaultTrafficSelector.builder()
-//            .matchEthType(Ethernet.TYPE_IPV4).matchIPProtocol(IPv4.PROTOCOL_ICMP)
-//            .build();
+    PiCriterion intercept = PiCriterion.builder()
+            .matchTernary(PiMatchFieldId.of("hdr.ethernet.ether_type"), Ethernet.TYPE_IPV4, 0xffff)
+            .matchTernary(PiMatchFieldId.of("hdr.ipv4.protocol"), IPv4.PROTOCOL_ICMP, 0xff)
+            .build();
 
     // Means to track detected pings from each device on a temporary basis
     private final HashMultimap<DeviceId, PingRecord> pings = HashMultimap.create();
@@ -111,10 +100,8 @@ public class OnePing {
         appId = coreService.registerApplication("org.onosproject.oneping",
                                                 () -> log.info("Periscope down."));
         packetService.addProcessor(packetProcessor, PRIORITY);
-        flowRuleService.addListener(flowListener);
-        requestPings();
-//        packetService.requestPackets(intercept, PacketPriority.CONTROL, appId,
-//                                     Optional.empty());
+        packetService.requestPackets(DefaultTrafficSelector.builder().matchPi(intercept).build(),
+                                     PacketPriority.CONTROL, appId, Optional.empty());
         log.info("Started");
     }
 
@@ -122,7 +109,6 @@ public class OnePing {
     public void deactivate() {
         packetService.removeProcessor(packetProcessor);
         flowRuleService.removeFlowRulesById(appId);
-        flowRuleService.removeListener(flowListener);
         log.info("Stopped");
     }
 
@@ -145,39 +131,6 @@ public class OnePing {
             pings.put(deviceId, ping);
             timer.schedule(new PingPruner(deviceId, ping), TIMEOUT_SEC * 1000);
         }
-    }
-
-    // Installs an intercept rule for the ICMP pings on all existing and newly discovered devices.
-    private void requestPings() {
-        deviceService.getAvailableDevices(Device.Type.SWITCH).forEach(d -> requestPings(d.id()));
-        deviceService.addListener(e -> {
-            Device device = e.subject();
-            if (device != null && e.type() == DeviceEvent.Type.DEVICE_ADDED && device.type() == Device.Type.SWITCH) {
-                requestPings(device.id());
-            }
-        });
-    }
-
-    // Installs an intercept rule for the ICMP pings.
-    private void requestPings(DeviceId deviceId) {
-        PiCriterion match = PiCriterion.builder()
-                .matchTernary(PiMatchFieldId.of("hdr.ethernet.ether_type"), Ethernet.TYPE_IPV4, 0xffff)
-                .matchTernary(PiMatchFieldId.of("hdr.ipv4.protocol"), IPv4.PROTOCOL_ICMP, 0xff)
-                .build();
-
-        PiAction action = PiAction.builder()
-                .withId(PiActionId.of("ingress.table0_control.drop"))
-                .build();
-
-        FlowRule dropRule = DefaultFlowRule.builder()
-                .forDevice(deviceId).fromApp(appId).makePermanent().withPriority(PRIORITY)
-                .forTable(PiTableId.of("ingress.table0_control.table0"))
-                .withSelector(DefaultTrafficSelector.builder().matchPi(match).build())
-                .withTreatment(DefaultTrafficTreatment.builder().piTableAction(action).build())
-                .build();
-
-        // Apply the drop rule...
-        flowRuleService.applyFlowRules(dropRule);
     }
 
     // Installs a drop rule for the ICMP pings between given src/dst.
@@ -208,6 +161,7 @@ public class OnePing {
             @Override
             public void run() {
                 flowRuleService.removeFlowRules(dropRule);
+                log.warn(MSG_PING_REENABLED, src, dst, deviceId);
             }
         }, 60 * SECONDS);
     }
@@ -274,17 +228,4 @@ public class OnePing {
         }
     }
 
-    // Listens for our removed flows.
-    private class InternalFlowListener implements FlowRuleListener {
-        @Override
-        public void event(FlowRuleEvent event) {
-            FlowRule flowRule = event.subject();
-            if (event.type() == RULE_REMOVED && flowRule.appId() == appId.id()) {
-                Criterion criterion = flowRule.selector().getCriterion(ETH_SRC);
-                MacAddress src = ((EthCriterion) criterion).mac();
-                MacAddress dst = ((EthCriterion) criterion).mac();
-                log.warn(MSG_PING_REENABLED, src, dst, flowRule.deviceId());
-            }
-        }
-    }
 }
