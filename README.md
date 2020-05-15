@@ -21,13 +21,12 @@ ONOS will run in the foreground of this shell and will print its log.
 
 ### Download ONOS Admin Tools
 ONOS comes with a set of tools for remote administration. These are primarily just wrappers
-that use ONOS REST API, and make remote administration easier.
+that use ONOS REST API, and make remote administration easier. We will use them in later steps.
 
 To download and unpack a local copy of these tools run the following command:
 ```
 $ ./get-onos-tools.sh
 ```
-They will be used in later steps.
 
 ## Start Mininet
 For this demonstration, a simple topology comprising a single Stratum switch,
@@ -61,7 +60,7 @@ $ tools/onos-app localhost install! target/oneping-2.0.0.oar
 After the application is installed, let's see if we can issue a single ping from `h1` to `h2`.
 From the Mininet shell, run the following:
 ```
-mininet> h1 ping -c h2
+mininet> h1 ping -c 1 h2
 ```
 
 You will see that the ping succeeded and in the ONOS logs, you should see messages similar to these:
