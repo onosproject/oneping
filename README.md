@@ -9,8 +9,8 @@ $ mvn clean install
 ```
 
 ## Demo Environment
-To test the application, you will need to run ONOS 2.2.2 and a Mininet network 
-- or equivalently a network with Straturm switch configured with basic.p4 pipeline.
+To test the application, you will need to run ONOS 2.2.2 and a Mininet network,
+ or equivalently a network with Stratum switch configured with `basic.p4` pipeline.
 
 ### Start ONOS
 You can start ONOS using the officially released docker image using the following:
