@@ -29,7 +29,7 @@ $ ./start-onos.sh
 ```
 ONOS will run in the foreground of this shell and will print its log.
 
-# Installing App
+### Installing App
 The remote administraton tools include `onos-app` facility to easily manage ONOS apps
 from the command line. You can use it to install our OnePing application as follows:
 ```
