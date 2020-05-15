@@ -30,7 +30,7 @@
     <version>2.0.0</version>
     <packaging>bundle</packaging>
 
-    <description>One-Ping-Only sample application</description>
+    <description>OnePing (only) sample application</description>
 
     <properties>
         <onos.version>2.2.2</onos.version>
