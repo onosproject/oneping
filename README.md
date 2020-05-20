@@ -1,5 +1,5 @@
 # OnePing
-Sample ONOS 2.x application showing how to use ONOS protocol-independent 
+Sample ONOS 2.2.x application showing how to use ONOS protocol-independent 
 flow rule programming abstractions to enforce that only one ICMP ping passes 
 between a unique source and destination within a single minute.
 
@@ -9,12 +9,12 @@ between a unique source and destination within a single minute.
 Requires Java 11 and Maven to be installed in your development environment.
 To compile the sources and to assemble the ONOS application archive (`.oar`) file, run the following:
 ```
-$ mvn clean install
+$ mvn package
 ```
 
 ## Demo Environment
 To test the application, you will need to run ONOS 2.2.2 and a Mininet network,
- or equivalently a network with Stratum switch configured with `basic.p4` pipeline.
+ or equivalently a network with a Stratum switch configured with `basic.p4` pipeline.
 
 ### Start ONOS
 You can start ONOS using the officially released docker image using the following:
