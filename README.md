@@ -83,5 +83,5 @@ you will see the following message in the ONOS logs:
 ```
 
 ## Creating your own app
-To learn how to easily create your own ONOS application, please follow this short [ONOS application tutorial](app-tutorial).
+To learn how to easily create your own ONOS application, please follow this short [ONOS application tutorial](app-tutorial.md).
  
