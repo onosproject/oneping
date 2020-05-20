@@ -1,6 +1,9 @@
 # OnePing
 Sample ONOS 2.x application showing how to use ONOS protocol-independent 
-flow rule programming abstractions.
+flow rule programming abstractions to enforce that only one ICMP ping passes 
+between a unique source and destination within a single minute.
+
+["One ping only, please"](https://www.youtube.com/watch?v=jr0JaXfKj68)
 
 ## Build
 Requires Java 11 and Maven to be installed in your development environment.
