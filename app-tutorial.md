@@ -93,4 +93,4 @@ useful beyond printing a start-up message. It is now up to us to code the networ
 control or monitoring functionality.
 
 For a simple example of accomplishing both using P4 and protocol-independent flow rule
-programming abstraction of ONOS, see [`OnePing.java`](src/main/java/org/onosproject/oneping/OnePing.java).
+programming abstraction of ONOS, see [`OnePing.java`](src/main/java/org/onos/oneping/OnePing.java).
