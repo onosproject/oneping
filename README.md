@@ -1,5 +1,6 @@
 # OnePing
-Sample ONOS 2.x application showing how to use ONOS forwarding abstractions.
+Sample ONOS 2.x application showing how to use ONOS protocol-independent 
+flow rule programming abstractions.
 
 ## Build
 Requires Java 11 and Maven to be installed in your development environment.
@@ -80,3 +81,7 @@ you will see the following message in the ONOS logs:
 ```
 23:14:14.667 WARN  [OnePing] Careful next time, Vasili! Re-enabled ping from F2:D2:F9:F8:78:00 to 52:82:FA:98:CF:2F on device:s1
 ```
+
+## Creating your own app
+To learn how to easily create your own ONOS application, please follow this short [ONOS application tutorial](app-tutorial).
+ 
