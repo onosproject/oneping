@@ -119,7 +119,6 @@ public class FlowData2 {
     public boolean valid; // Has the flow met the requirements of a bi-directional flow
     public long activeStart; // The starting time of the latest activity
     public long timestamp; // Timestamp
-    public long firstTime; // The time of the first packet in the flow
     public long flast; // The time of the last packet in the forward direction
     public long blast; // The time of the last packet in the backward direction
     public TcpState cstate; // Connection state of the client

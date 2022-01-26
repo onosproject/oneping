@@ -222,7 +222,6 @@ public class OnePing {
         FlowKey backwardKey = new FlowKey(dstIP, dstPort, srcIP, srcPort, proto);
         FlowData f;
 
-
         // Check if flow is stored
         if (flows.containsKey(forwardKey) || flows.containsKey(backwardKey)) {
             // Get corresponding flow and update it
@@ -233,7 +232,8 @@ public class OnePing {
             }
             f.Add(eth, srcIP);
             // Calling export will generate a log of the updated flow features
-            //f.Export();
+            //log.info("FLOW EXISTS AND UPDATING");
+            f.Export();
 
             // log.info("Updating flow, Key(srcIP: {}, srcPort: {}, dstIP: {}, dstPort: {}, proto: {})", f.srcIP, f.srcPort, f.dstIP, f.dstPort, f.proto);
         } else {
@@ -242,6 +242,8 @@ public class OnePing {
             // Include forward and backward keys
             flows.put(forwardKey, f);
             flows.put(backwardKey, f);
+            //log.info("FLOW IS NEW AND ADDING");
+            //f.Export();
             // log.info("Added new flow, Key(srcIP: {}, srcPort: {}, dstIP: {}, dstPort: {}, proto: {})", srcIP, srcPort, dstIP, dstPort, proto);
         }
         if(f.IsClosed()){
@@ -404,6 +406,7 @@ public class OnePing {
                 log.info("ICMP packet: {}", niPacket.toString());
             }
             else if (isTCP(eth)) {
+                log.info("TCP packet");
                 processTCP(context, eth);
             }
         }
